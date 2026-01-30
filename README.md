@@ -39,3 +39,7 @@ Each of these checks increases the overall risk score.
 1. Download or clone the repository
 2. Open a terminal inside the project folder
 3. Run the program using:
+## Future Improvements
+1. Add machine learning based detection
+2. Improve misspelling detection
+3. convert into a browser extension
