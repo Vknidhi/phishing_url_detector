@@ -1,73 +1,158 @@
-# Phishing URL Detector
-# Rule-based cybersecurity project
+"""
+Phishing URL Detector
+A rule-based tool that analyzes URLs for common phishing characteristics.
+"""
 
 import re
+from urllib.parse import urlparse
 
-# Take URL input
-url = input("Enter a URL: ").lower()
-
-# List of suspicious keywords
-suspicious_words = [
+SUSPICIOUS_KEYWORDS = [
     "login", "verify", "secure", "account",
-    "update", "bank", "free", "password", "confirm"
+    "update", "bank", "free", "password", "confirm",
+    "signin", "credential", "suspend", "alert", "urgent",
 ]
 
-# Characters often used in misspellings
-misspellings = ["0", "1", "@"]
+TYPOSQUAT_PATTERNS = {
+    "paypa1": "paypal",
+    "micros0ft": "microsoft",
+    "g00gle": "google",
+    "amaz0n": "amazon",
+    "faceb00k": "facebook",
+    "app1e": "apple",
+    "netf1ix": "netflix",
+}
 
-score = 0
-reasons = []
 
-# Rule 1: Suspicious keywords
-for word in suspicious_words:
-    if word in url:
-        score += 1
-        reasons.append("Contains suspicious keyword")
-        break
+def check_suspicious_keywords(url):
+    """Check for suspicious keywords commonly found in phishing URLs."""
+    found = [word for word in SUSPICIOUS_KEYWORDS if word in url]
+    if found:
+        return 1, f"Contains suspicious keyword(s): {', '.join(found)}"
+    return 0, None
 
-# Rule 2: Long URL
-if len(url) > 75:
-    score += 1
-    reasons.append("URL is unusually long")
 
-# Rule 3: '@' symbol trick
-if "@" in url:
-    score += 1
-    reasons.append("Contains '@' symbol")
+def check_url_length(url):
+    """Flag unusually long URLs."""
+    if len(url) > 75:
+        return 1, f"URL is unusually long ({len(url)} characters)"
+    return 0, None
 
-# Rule 4: IP address instead of domain
-if re.search(r"\d+\.\d+\.\d+\.\d+", url):
-    score += 2
-    reasons.append("Uses IP address instead of domain")
 
-# Rule 5: HTTPS check
-if not url.startswith("https"):
-    score += 1
-    reasons.append("Does not use HTTPS")
+def check_at_symbol(url):
+    """Check for '@' symbol used to obscure the real destination."""
+    parsed = urlparse(url)
+    path_and_rest = url.replace(f"{parsed.scheme}://", "", 1) if parsed.scheme else url
+    if "@" in path_and_rest:
+        return 1, "Contains '@' symbol (may redirect to a different host)"
+    return 0, None
 
-# Rule 6: Misspelling / typosquatting
-for char in misspellings:
-    if char in url:
-        score += 1
-        reasons.append("Possible misspelling detected")
-        break
 
-# Rule 7: Too many subdomains
-if url.count('.') > 3:
-    score += 1
-    reasons.append("Too many subdomains detected")
+def check_ip_address(url):
+    """Check if URL uses an IP address instead of a domain name."""
+    if re.search(r"https?://\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}", url):
+        return 2, "Uses IP address instead of domain name"
+    return 0, None
 
-# Final result
-print("\n🔍 Analysis Result")
 
-if score >= 5:
-    print("🚨 PHISHING URL")
-elif score >= 2:
-    print("⚠️ SUSPICIOUS URL")
-else:
-    print("✅ SAFE URL")
+def check_https(url):
+    """Check if URL uses HTTPS."""
+    if not url.startswith("https://"):
+        return 1, "Does not use HTTPS"
+    return 0, None
 
-if reasons:
-    print("\nReasons:")
-    for r in reasons:
-        print("-", r)
+
+def check_typosquatting(url):
+    """Check for known typosquatting patterns in the domain."""
+    parsed = urlparse(url if "://" in url else f"http://{url}")
+    domain = parsed.netloc.lower()
+    found = []
+    for typo, real in TYPOSQUAT_PATTERNS.items():
+        if typo in domain:
+            found.append(f"'{typo}' (looks like '{real}')")
+    if found:
+        return 1, f"Possible typosquatting detected: {', '.join(found)}"
+    return 0, None
+
+
+def check_subdomain_count(url):
+    """Flag URLs with an excessive number of subdomains."""
+    parsed = urlparse(url if "://" in url else f"http://{url}")
+    domain = parsed.netloc
+    dot_count = domain.count(".")
+    if dot_count > 3:
+        return 1, f"Too many subdomains ({dot_count} dots in domain)"
+    return 0, None
+
+
+def analyze_url(url):
+    """
+    Analyze a URL for phishing characteristics.
+
+    Returns a tuple of (score, label, reasons).
+    """
+    url_lower = url.lower().strip()
+
+    checks = [
+        check_suspicious_keywords,
+        check_url_length,
+        check_at_symbol,
+        check_ip_address,
+        check_https,
+        check_typosquatting,
+        check_subdomain_count,
+    ]
+
+    total_score = 0
+    reasons = []
+
+    for check in checks:
+        score, reason = check(url_lower)
+        total_score += score
+        if reason:
+            reasons.append(reason)
+
+    if total_score >= 5:
+        label = "PHISHING"
+    elif total_score >= 2:
+        label = "SUSPICIOUS"
+    else:
+        label = "SAFE"
+
+    return total_score, label, reasons
+
+
+def display_result(url, score, label, reasons):
+    """Display the analysis result."""
+    icons = {"PHISHING": "\U0001f6a8", "SUSPICIOUS": "\u26a0\ufe0f", "SAFE": "\u2705"}
+
+    print(f"\n\U0001f50d Analysis Result for: {url}")
+    print(f"{icons.get(label, '')} {label} (score: {score})")
+
+    if reasons:
+        print("\nReasons:")
+        for reason in reasons:
+            print(f"  - {reason}")
+    print()
+
+
+def main():
+    """Run the phishing URL detector interactively."""
+    print("=" * 50)
+    print("  Phishing URL Detector")
+    print("=" * 50)
+
+    while True:
+        url = input("\nEnter a URL (or 'quit' to exit): ").strip()
+        if url.lower() in ("quit", "exit", "q"):
+            print("Goodbye!")
+            break
+        if not url:
+            print("Please enter a valid URL.")
+            continue
+
+        score, label, reasons = analyze_url(url)
+        display_result(url, score, label, reasons)
+
+
+if __name__ == "__main__":
+    main()
